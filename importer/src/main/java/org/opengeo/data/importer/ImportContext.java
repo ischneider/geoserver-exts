@@ -237,7 +237,15 @@ public class ImportContext implements Serializable {
     public void setProgress(ProgressMonitor progress) {
         this.progress = progress;
     }
-
+    
+    public Object getJobQueueKey() {
+        return getJobQueueKey(id);
+    }
+    
+    public static Object getJobQueueKey(Long id) {
+        return "import" + id;
+    }
+    
     @Override
     public int hashCode() {
         final int prime = 31;

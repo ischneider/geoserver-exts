@@ -17,9 +17,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -34,7 +33,6 @@ import org.geoserver.catalog.ResourceInfo;
 import org.geoserver.catalog.StoreInfo;
 import org.geoserver.catalog.StyleInfo;
 import org.geoserver.catalog.WorkspaceInfo;
-import org.geoserver.catalog.impl.StoreInfoImpl;
 import org.geoserver.config.util.XStreamPersister;
 import org.geoserver.config.util.XStreamPersister.CRSConverter;
 import org.geoserver.config.util.XStreamPersisterFactory;
@@ -55,10 +53,10 @@ import org.geotools.referencing.CRS;
 import org.geotools.util.logging.Logging;
 import org.opengeo.data.importer.ImportTask.State;
 import org.opengeo.data.importer.bdb.BDBImportStore;
-import org.opengeo.data.importer.job.Job;
 import org.opengeo.data.importer.job.JobQueue;
+import org.opengeo.data.importer.job.ProgressCallable;
+import org.opengeo.data.importer.job.ProgressFuture;
 import org.opengeo.data.importer.job.ProgressMonitor;
-import org.opengeo.data.importer.job.Task;
 import org.opengeo.data.importer.transform.RasterTransformChain;
 import org.opengeo.data.importer.transform.ReprojectTransform;
 import org.opengeo.data.importer.transform.TransformChain;
@@ -92,7 +90,7 @@ public class Importer implements InitializingBean, DisposableBean {
     StyleGenerator styleGen;
 
     /** job queue */
-    JobQueue jobs = new JobQueue();
+    JobQueue jobs = new JobQueue(1, new LinkedBlockingQueue<Runnable>());
     
     ConcurrentHashMap<Long,ImportItem> currentlyProcessing = new ConcurrentHashMap<Long, ImportItem>();
 
@@ -266,10 +264,10 @@ public class Importer implements InitializingBean, DisposableBean {
         return context;
     }
 
-    public Long createContextAsync(final ImportData data, final WorkspaceInfo targetWorkspace, 
+    public ProgressFuture<ImportContext> createContextAsync(final ImportData data, final WorkspaceInfo targetWorkspace, 
         final StoreInfo targetStore) throws IOException {
-        return jobs.submit(new Job<ImportContext>() {
-            @Override
+        return jobs.submit(new ProgressCallable<ImportContext>() {
+
             protected ImportContext call(ProgressMonitor monitor) throws Exception {
                 return createContext(data, targetWorkspace, targetStore, monitor);
             }
@@ -643,8 +641,8 @@ public class Importer implements InitializingBean, DisposableBean {
         changed(task.getContext());
     }
 
-    public Long runAsync(final ImportContext context, final ImportFilter filter) {
-        return jobs.submit(new Job<ImportContext>() {
+    public ProgressFuture<ImportContext> runAsync(final ImportContext context, final ImportFilter filter) {
+        return jobs.submit(new ProgressCallable<ImportContext>(context.getJobQueueKey()) {
             @Override
             protected ImportContext call(ProgressMonitor monitor) throws Exception {
                 run(context, filter, monitor);
@@ -653,8 +651,8 @@ public class Importer implements InitializingBean, DisposableBean {
         });
     }
 
-    public Task<ImportContext> getTask(Long job) {
-        return (Task<ImportContext>) jobs.getFuture(job);
+    public ProgressFuture<ImportContext> getProgressFuture(Object key) {
+        return (ProgressFuture<ImportContext>) jobs.getFuture(key);
     }
 
     /* 
@@ -895,7 +893,7 @@ public class Importer implements InitializingBean, DisposableBean {
         long startTime = System.currentTimeMillis();
         item.clearImportMessages();
         
-        item.setTotalToProcess(format.getFeatureCount(item.getTask().getData(), item));
+        monitor.setTotalToProcess(format.getFeatureCount(item.getTask().getData(), item));
         
         LOGGER.info("begining import");
         try {
@@ -928,7 +926,7 @@ public class Importer implements InitializingBean, DisposableBean {
                 } else {
                     writer.write();
                 }
-                item.setNumberProcessed(++cnt);
+                monitor.setNumberProcessed(++cnt);
             }
             transaction.commit();
             if (skipped > 0) {

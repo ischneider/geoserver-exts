@@ -28,6 +28,7 @@ import org.opengeo.data.importer.ImportContext;
 import org.opengeo.data.importer.ImportItem;
 import org.opengeo.data.importer.ImportTask;
 import org.opengeo.data.importer.Importer;
+import org.opengeo.data.importer.job.ProgressMonitor;
 import org.opengeo.data.importer.transform.TransformChain;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.NoSuchAuthorityCodeException;
@@ -73,8 +74,13 @@ public class ItemResource extends AbstractResource {
         ImportItem inProgress = importer.getCurrentlyProcessingItem(imprt);
         try {
             if (inProgress != null) {
-                progress.put("progress", inProgress.getNumberProcessed());
-                progress.put("total", inProgress.getTotalToProcess());
+                ProgressMonitor monitor = inProgress.progress();
+                progress.put("progress", monitor.getNumberProcessed());
+                progress.put("total", monitor.getTotalToProcess());
+                // @revisit - we could use the monitor framework to get the state
+                // this would remove the need for the getCurrentlyProcessingItem
+                // method and it's somewhat duplicate efforts. this would also
+                // require using importer.getProgressFuture to find the progress
                 progress.put("state", inProgress.getState().toString());
             } else {
                 ImportItem item = (ImportItem) lookupItem(false);

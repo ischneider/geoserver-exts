@@ -62,15 +62,13 @@ import org.geoserver.web.wicket.HelpLink;
 import org.geoserver.web.wicket.ParamResourceModel;
 import org.geoserver.web.wicket.SimpleAjaxLink;
 import org.geotools.data.DataStoreFactorySpi;
-import org.geotools.util.DefaultProgressListener;
 import org.geotools.util.logging.Logging;
 import org.opengeo.data.importer.ImportContext;
 import org.opengeo.data.importer.ImportData;
 import org.opengeo.data.importer.ImportTask;
 import org.opengeo.data.importer.Importer;
+import org.opengeo.data.importer.job.ProgressFuture;
 import org.opengeo.data.importer.job.ProgressMonitor;
-import org.opengeo.data.importer.job.Task;
-import org.opengis.util.ProgressListener;
 
 /**
  * First page of the import wizard.
@@ -205,7 +203,7 @@ public class ImportDataPage extends GeoServerSecuredPage {
 
                 final Long jobid;
                 try {
-                    jobid = createContext();
+                    jobid = createContext().getKey();
                 } catch (Exception e) {
                     error(e);
                     return;
@@ -215,7 +213,7 @@ public class ImportDataPage extends GeoServerSecuredPage {
                 this.add(new AbstractAjaxTimerBehavior(Duration.seconds(3)) {
                    protected void onTimer(AjaxRequestTarget target) {
                        Importer importer = ImporterWebUtils.importer();
-                       Task<ImportContext> t = importer.getTask(jobid);
+                       ProgressFuture<ImportContext> t = importer.getProgressFuture(jobid);
 
                        if (t.isDone()) {
                            try {
@@ -289,10 +287,10 @@ public class ImportDataPage extends GeoServerSecuredPage {
             public void onClick(AjaxRequestTarget target) {
                 Importer importer = ImporterWebUtils.importer();
                 Long jobid = getModelObject();
-                Task<ImportContext> task = importer.getTask(jobid);
+                ProgressFuture<ImportContext> task = importer.getProgressFuture(jobid);
                 if (task != null && !task.isDone() && !task.isCancelled()) {
-                    task.getMonitor().setCanceled(true);
                     task.cancel(false);
+                    // @todo why is get being called here???
                     try {
                         task.get();
                     }
@@ -352,7 +350,7 @@ public class ImportDataPage extends GeoServerSecuredPage {
         updateTargetStore(null);
     }
 
-    Long createContext() throws Exception {
+    ProgressFuture<ImportContext> createContext() throws Exception {
         ImportSourcePanel panel = (ImportSourcePanel) sourcePanel.get("content");
         ImportData source = panel.createImportSource();
 

@@ -53,7 +53,7 @@ import org.opengeo.data.importer.ImportTask;
 import org.opengeo.data.importer.ImportTask.State;
 import org.opengeo.data.importer.RasterFormat;
 import org.opengeo.data.importer.VectorFormat;
-import org.opengeo.data.importer.job.Task;
+import org.opengeo.data.importer.job.ProgressFuture;
 
 public class ImportPage extends GeoServerSecuredPage {
 
@@ -219,7 +219,7 @@ public class ImportPage extends GeoServerSecuredPage {
                         filter.add(task, itemTable.getSelection());
 
                         final Long jobid = 
-                            importer().runAsync(task.getContext(), filter);
+                            importer().runAsync(task.getContext(), filter).getKey();
                         setDefaultModelObject(jobid);
 
                         final AjaxLink self = this;
@@ -228,7 +228,7 @@ public class ImportPage extends GeoServerSecuredPage {
                         itemTable.add(new AbstractAjaxTimerBehavior(Duration.milliseconds(500)) {
                             @Override
                             protected void onTimer(AjaxRequestTarget target) {
-                                Task<ImportContext> job = importer().getTask(jobid); 
+                                ProgressFuture<ImportContext> job = importer().getProgressFuture(jobid); 
                                 if (job == null || job.isDone()) {
                                     //remove the timer
                                     stop();
@@ -278,12 +278,11 @@ public class ImportPage extends GeoServerSecuredPage {
                             return;
                         }
 
-                        Task<ImportContext> task = importer().getTask(jobid);
+                        ProgressFuture<ImportContext> task = importer().getProgressFuture(jobid);
                         if (task == null || task.isDone()) {
                             return;
                         }
 
-                        task.getMonitor().setCanceled(true);
                         task.cancel(false);
                         try {
                             task.get();

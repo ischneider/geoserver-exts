@@ -68,10 +68,6 @@ public class ImportItem implements Serializable {
     
     String originalName;
     
-    transient volatile int totalToProcess;
-    
-    transient volatile int numberProcessed;
-    
     List<LogRecord> importMessages = new ArrayList<LogRecord>();
 
     /** mode to use when importing into existing dataset */
@@ -170,22 +166,6 @@ public class ImportItem implements Serializable {
         this.originalName = originalName;
     }
     
-    public int getNumberProcessed() {
-        return numberProcessed;
-    }
-
-    public void setNumberProcessed(int numberProcessed) {
-        this.numberProcessed = numberProcessed;
-    }
-
-    public int getTotalToProcess() {
-        return totalToProcess;
-    }
-
-    public void setTotalToProcess(int totalToProcess) {
-        this.totalToProcess = totalToProcess;
-    }
-
     public UpdateMode getUpdateMode() {
         return updateMode;
     }
