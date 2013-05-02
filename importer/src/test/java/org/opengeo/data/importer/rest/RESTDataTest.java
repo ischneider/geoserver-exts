@@ -30,6 +30,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.servlet.Filter;
+import static junit.framework.Assert.assertEquals;
 
 import org.geoserver.catalog.Catalog;
 import org.geoserver.catalog.DataStoreInfo;
@@ -37,87 +38,84 @@ import org.geoserver.catalog.LayerInfo;
 import org.geoserver.data.test.MockData;
 import org.geoserver.platform.GeoServerExtensions;
 import org.geotools.data.DataStore;
+import org.opengeo.data.importer.client.ClientTask;
+import org.opengeo.data.importer.client.ImporterClient;
 import org.restlet.data.MediaType;
 
 public class RESTDataTest extends ImporterTestSupport {
 
+    TestClient client = new TestClient();
+
+    private void assertTaskState(int number, String state) {
+        assertEquals(number, client.getContext().getTasks().size());
+        for (int i = 0; i < client.getContext().getTasks().size(); i++) {
+            assertEquals(state, client.getContext().getTasks().get(i).getState());
+        }
+    }
+
     public void testSingleFileUpload() throws Exception {
-        int i = postNewImport();
-        int t = postNewTaskAsMultiPartForm(i, "shape/archsites_epsg_prj.zip");
+        client.uploadMultipartTestData("shape/archsites_epsg_prj.zip");
+        assertTaskState(1, "READY");
 
-        JSONObject task = getTask(i, t);
-        assertEquals("READY", task.getString("state"));
-
-        postImport(i);
+        client.runImport();
         runChecks("archsites");
     }
 
     public void testFilePut() throws Exception {
-        int i = postNewImport();
-        int t1 = putNewTask(i, "shape/archsites_epsg_prj.zip");
+        client.uploadTestData("shape/archsites_epsg_prj.zip");
+        assertTaskState(1, "READY");
 
-        JSONObject task = getTask(i, t1);
-        assertEquals("READY", task.getString("state"));
-        
-        postImport(i);
+        client.runImport();
         runChecks("archsites");
     }
 
     public void testMultipleFileUpload() throws Exception {
-        int i = postNewImport();
-        int t1 = postNewTaskAsMultiPartForm(i, "shape/archsites_epsg_prj.zip");
+        client.uploadTestData("shape/archsites_epsg_prj.zip");
+        assertTaskState(1, "READY");
 
-        JSONObject task = getTask(i, t1);
-        assertEquals("READY", task.getString("state"));
+        client.uploadTestData("shape/bugsites_esri_prj.tar.gz");
+        assertTaskState(2, "READY");
 
-        int t2 = postNewTaskAsMultiPartForm(i, "shape/bugsites_esri_prj.tar.gz");
-        task = getTask(i, t2);
-        assertEquals("READY", task.getString("state"));
-        
-        postImport(i);
+        client.runImport();
         runChecks("archsites");
         runChecks("bugsites");
     }
 
     public void testFileUploadWithConfigChange() throws Exception {
-        int i = postNewImport();
-        int t = postNewTaskAsMultiPartForm(i, "shape/archsites_no_crs.zip");
+        client.uploadMultipartTestData("shape/archsites_no_crs.zip");
+        ClientTask task = client.getTasks().get(0);
+        assertEquals("NO_CRS", task.getState());
 
-        JSONObject task = getTask(i, t);
-        assertEquals("NO_CRS", task.getString("state"));
-        
-        String json = 
-        "{" +
-          "\"task\": {" +
-            "\"layer\": {" +
-                    "\"srs\": \"EPSG:4326\"" + 
-             "}" +
-           "}" + 
-        "}";
-        putTask(i, t, json);
+        task.setLayerSRS("EPSG:4326");
+        client.putTask(task);
 
-        task = getTask(i, t);
-        assertEquals("READY", task.getString("state"));
-        assertEquals("gs_archsites", task.getJSONObject("layer").getJSONObject("style").getString("name"));
-        json = 
-        "{" +
-          "\"task\": {" +
-            "\"layer\": {" +
-              "\"style\": {" +
-                    "\"name\": \"point\"" + 
-                 "}" +
-               "}" +
-           "}" + 
-        "}";
-        putTask(i, t,json);
+        // fetch it again
+        client.reloadTasks();
+        task = client.getTasks().get(0);
+        assertEquals("READY", task.getState());
 
-        task = getTask(i, t);
-        
-        assertEquals("READY", task.getString("state"));
-        assertEquals("point", task.getJSONObject("layer").getJSONObject("style").getString("name"));
-
-        postImport(i);
+        client.runImport();
         runChecks("archsites");
+//        assertEquals("gs_archsites", task.getJSONObject("layer").getJSONObject("style").getString("name"));
+//        json =
+//        "{" +
+//          "\"task\": {" +
+//            "\"layer\": {" +
+//              "\"style\": {" +
+//                    "\"name\": \"point\"" +
+//                 "}" +
+//               "}" +
+//           "}" +
+//        "}";
+//        putTask(i, t,json);
+//
+//        task = getTask(i, t);
+//
+//        assertEquals("READY", task.getString("state"));
+//        assertEquals("point", task.getJSONObject("layer").getJSONObject("style").getString("name"));
+//
+//        postImport(i);
+//        runChecks("archsites");
     }
 
     public void testSingleFileUploadIntoDb() throws Exception {
